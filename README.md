@@ -20,9 +20,9 @@ The Streamlit UI lets you interactively explore each reasoning cycle, view citat
 ## 🧠 System Architecture
 
 ```mermaid
-graph TD;
-    A[Draft (Gemini)] --> B[Execute Tools (Tavily)]
-    B --> C[Revisor (Gemini)]
+graph TD
+    A[Draft Gemini] --> B[Execute Tools Tavily]
+    B --> C[Revisor Gemini]
     C -->|Improvement Needed| B
     C -->|Converged| D[End]
 ```
@@ -183,4 +183,4 @@ MIT License © 2025
 
 You are free to modify and distribute this project with attribution.
 
----
+
