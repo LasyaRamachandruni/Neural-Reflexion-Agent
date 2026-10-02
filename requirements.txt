@@ -1,8 +1,10 @@
-﻿python-dotenv
-pydantic
-streamlit
-langchain
-langchain-core
-langchain-google-genai
-langchain-tavily
-langgraph
+# LangChain / LangGraph 0.x APIs (MessageGraph) are used, so stay below 1.0
+langchain>=0.2.16,<1.0
+langchain-core>=0.2.38,<1.0
+langgraph>=0.2.27,<1.0
+langchain-google-genai>=2.0.4,<3.0
+langchain-tavily>=0.1.0
+tavily-python>=0.5.0
+pydantic>=2.7.0
+python-dotenv>=1.0
+streamlit>=1.35
