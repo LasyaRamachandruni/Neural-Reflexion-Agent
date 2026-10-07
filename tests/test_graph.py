@@ -92,3 +92,16 @@ def test_compiled_graph_keeps_no_state_between_runs():
     second = final_result(app.invoke("q"))
     # A global best score would end the second run after one revision
     assert first["revisions"] == second["revisions"] == 2
+
+
+def test_cli_exits_cleanly_without_keys(monkeypatch):
+    import pytest
+
+    from reflexion_agent import main
+
+    for key in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "TAVILY_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setattr("dotenv.load_dotenv", lambda *a, **k: False)
+    with pytest.raises(SystemExit) as exc:
+        main(["question"])
+    assert "TAVILY_API_KEY" in str(exc.value)

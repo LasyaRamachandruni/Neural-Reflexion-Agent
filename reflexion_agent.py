@@ -5,6 +5,8 @@ Run from the command line:
     python reflexion_agent.py "Your question here" --max-iterations 2
 """
 import argparse
+import os
+import sys
 from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
@@ -152,6 +154,15 @@ def print_final(messages: List[BaseMessage]) -> None:
             print(f"  - {r}")
 
 
+def missing_keys() -> List[str]:
+    missing = []
+    if not (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")):
+        missing.append("GEMINI_API_KEY (or GOOGLE_API_KEY)")
+    if not os.getenv("TAVILY_API_KEY"):
+        missing.append("TAVILY_API_KEY")
+    return missing
+
+
 def main(argv: Optional[List[str]] = None) -> None:
     from dotenv import load_dotenv
 
@@ -162,6 +173,10 @@ def main(argv: Optional[List[str]] = None) -> None:
                         help="maximum number of search passes (default: %(default)s)")
     parser.add_argument("--show-graph", action="store_true", help="print the graph as Mermaid and exit")
     args = parser.parse_args(argv)
+
+    missing = missing_keys()
+    if missing:
+        sys.exit("Missing environment variables: " + ", ".join(missing) + " (see .env.example)")
 
     app = build_graph(max_iterations=args.max_iterations)
     if args.show_graph:
