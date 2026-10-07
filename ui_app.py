@@ -28,7 +28,7 @@ from langgraph.graph import END, MessageGraph
 
 # Your project modules
 from chains import revisor_chain, first_responder_chain
-from execute_tools import execute_tools, SEEN_URLS
+from execute_tools import execute_tools
 
 # ---------------------------
 # Helpers (mirroring your agent)
@@ -119,7 +119,6 @@ def export_run_json(prompt: str, messages: List[BaseMessage]) -> bytes:
     blob = {
         "prompt": prompt,
         "messages": serial,
-        "sources": sorted(SEEN_URLS),
     }
     return json.dumps(blob, indent=2).encode("utf-8")
 
@@ -140,10 +139,6 @@ with st.sidebar:
     st.markdown("**Environment keys loaded**")
     st.write("GOOGLE_API_KEY:", bool(os.getenv("GOOGLE_API_KEY")))
     st.write("TAVILY_API_KEY:", bool(os.getenv("TAVILY_API_KEY")))
-    st.divider()
-    if st.button("🧼 Clear deduped sources"):
-        SEEN_URLS.clear()
-        st.toast("Cleared sources", icon="🧽")
 
 prompt = st.text_area("Enter your prompt", value="Write about how small business can leverage AI to grow", height=120)
 run = st.button("▶️ Run Reflexion", type="primary")
@@ -166,7 +161,7 @@ if run and prompt.strip():
         "refs": refs,
         "queries": queries,
         "messages": messages,
-        "sources": sorted(SEEN_URLS),
+        "sources": [],
     })
 
 # ---------------------------

@@ -11,7 +11,7 @@ from langchain_core.messages import BaseMessage, ToolMessage, AIMessage, HumanMe
 from langgraph.graph import END, MessageGraph
 
 from chains import revisor_chain, first_responder_chain
-from execute_tools import execute_tools, SEEN_URLS
+from execute_tools import execute_tools
 
 # --------------------
 # Graph setup
