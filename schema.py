@@ -17,5 +17,5 @@ class AnswerQuestion(BaseModel):
 class ReviseAnswer(AnswerQuestion):
     """Revise your original answer to your question."""
     references: List[str] = Field(
-        description="Citations motivating your updated answer."
+        description='Citations for your updated answer, each as "[n] Title - URL" using a URL from the search results.'
     )

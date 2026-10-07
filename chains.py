@@ -1,23 +1,14 @@
 # chains.py
-import os
 import datetime
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.messages import HumanMessage
-from langchain_core.output_parsers.openai_tools import (
-    PydanticToolsParser,
-    JsonOutputToolsParser,
-)
-from langchain_google_genai import ChatGoogleGenerativeAI
+import os
+from typing import Tuple
+
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.runnables import Runnable
+
 from schema import AnswerQuestion, ReviseAnswer
 
-# --- Auth (Gemini) ---
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-if not GOOGLE_API_KEY:
-    raise RuntimeError("Missing GOOGLE_API_KEY in environment/.env")
-
-# --- Parsers (optional, useful if you later validate) ---
-pydantic_parser = PydanticToolsParser(tools=[AnswerQuestion])
-parser = JsonOutputToolsParser(return_id=True)
+DEFAULT_MODEL = "gemini-2.5-pro"
 
 # --- Base prompt for both actors ---
 actor_prompt_template = ChatPromptTemplate.from_messages(
@@ -42,39 +33,51 @@ first_responder_prompt_template = actor_prompt_template.partial(
     first_instruction="Provide a detailed ~250 word answer"
 )
 
-# --- LLM ---
-from langchain_google_genai import ChatGoogleGenerativeAI
-import os
-llm = ChatGoogleGenerativeAI(
-    # pick ONE of these; start with flash-latest:
-    model="gemini-2.5-pro",
-    # model="gemini-1.5-pro-latest",
-    # model="gemini-1.5-pro-002",
-    # model="gemini-1.0-pro",          # fallback for older accounts
-    api_key=os.getenv("GOOGLE_API_KEY"),
-)
-
-
-# --- Chains ---
-first_responder_chain = (
-    first_responder_prompt_template
-    | llm.bind_tools(tools=[AnswerQuestion], tool_choice="AnswerQuestion")
-)
-
 revise_instructions = """Revise your previous answer using the new information.
 - Max 250 words. Do not exceed.
-- Include inline numeric citations like [1], [2] that map to a "References" list.
-- Provide 3–6 references that support specific claims; prefer sources (<= 3 years).
-- Avoid generic claims without a citation.
+- Include inline numeric citations like [1], [2] that map to the "references" field.
+- The search results are in the tool messages as JSON ({query: {"results": [{title, url, content}]}}).
+  Only cite URLs that appear there. Never invent a source or a URL.
+- Write each reference as "[n] Title - URL" using the exact URL from the search results.
+- If the searches returned nothing useful, give fewer references rather than making them up.
+- Do not put a References section inside the answer text; use the "references" field.
 - Keep a professional, actionable tone.
 """
 
-
-revisor_chain = (
-    actor_prompt_template.partial(first_instruction=revise_instructions)
-    | llm.bind_tools(tools=[ReviseAnswer], tool_choice="ReviseAnswer")
-)
-
-__all__ = ["first_responder_chain", "revisor_chain"]
+revisor_prompt_template = actor_prompt_template.partial(first_instruction=revise_instructions)
 
 
+def get_api_key() -> str:
+    """Gemini key from GEMINI_API_KEY or GOOGLE_API_KEY."""
+    key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if not key:
+        raise RuntimeError("Set GEMINI_API_KEY or GOOGLE_API_KEY in your environment/.env")
+    return key
+
+
+def get_default_llm():
+    from langchain_google_genai import ChatGoogleGenerativeAI
+
+    return ChatGoogleGenerativeAI(
+        model=os.getenv("GEMINI_MODEL", DEFAULT_MODEL),
+        google_api_key=get_api_key(),
+    )
+
+
+def build_chains(llm=None) -> Tuple[Runnable, Runnable]:
+    """Return (first_responder_chain, revisor_chain) for the given chat model.
+
+    The model only needs to support .bind_tools(tools=..., tool_choice=...).
+    """
+    if llm is None:
+        llm = get_default_llm()
+    first_responder_chain = first_responder_prompt_template | llm.bind_tools(
+        tools=[AnswerQuestion], tool_choice="AnswerQuestion"
+    )
+    revisor_chain = revisor_prompt_template | llm.bind_tools(
+        tools=[ReviseAnswer], tool_choice="ReviseAnswer"
+    )
+    return first_responder_chain, revisor_chain
+
+
+__all__ = ["build_chains", "get_default_llm", "get_api_key"]
