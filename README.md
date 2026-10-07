@@ -106,4 +106,4 @@ The tests use a fake Tavily client that returns the same dict shape as `TavilySe
 
 ## License
 
-MIT
+Copyright (c) 2026 Lasya Ramachandruni. All rights reserved. See [LICENSE](LICENSE).
