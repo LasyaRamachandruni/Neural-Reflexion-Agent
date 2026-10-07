@@ -1,186 +1,109 @@
-# 🧠 Neural Reflexion Agent
+# Neural Reflexion Agent
 
-**Self-Improving AI Reasoning with LangGraph, Gemini, Tavily & Streamlit**
+[![CI](https://github.com/LasyaRamachandruni/Neural-Reflexion-Agent/actions/workflows/ci.yml/badge.svg)](https://github.com/LasyaRamachandruni/Neural-Reflexion-Agent/actions/workflows/ci.yml)
 
-## 🚀 Overview
+A Reflexion-style answer loop built with LangGraph: Gemini drafts an answer and critiques it, Tavily searches the web for the queries the critique suggests, and Gemini revises the answer with citations. Citations are then checked in code against the URLs that were actually retrieved. There is a command-line entry point and a Streamlit UI.
 
-The Neural Reflexion Agent simulates human-like reasoning, critique, and self-improvement. It uses LangGraph to model a feedback-driven cognitive loop where an LLM (Gemini) drafts, reflects, retrieves evidence, and revises its own answers using real-time web data (Tavily).
-
-The Streamlit UI lets you interactively explore each reasoning cycle, view citations, compare runs, and export results.
-
-## 🧩 Key Features
-
-- ✅ **LangGraph Reflexion Loop** — iterative reasoning chain: draft → execute_tools → revisor
-- ✅ **Self-Critique & Revision** — each iteration improves clarity, evidence, and structure
-- ✅ **Live Web Search** — integrates the Tavily API for real-time data grounding
-- ✅ **Heuristic Reward Scoring** — mimics RL convergence with a self-evaluation score
-- ✅ **Streamlit UI** — intuitive front-end for prompts, iterations, results, and comparisons
-- ✅ **Downloadable Outputs** — export final answer (Markdown) or full reasoning trace (JSON)
-
-## 🧠 System Architecture
+## How it works
 
 ```mermaid
 graph TD
-    A[Draft Gemini] --> B[Execute Tools Tavily]
-    B --> C[Revisor Gemini]
-    C -->|Improvement Needed| B
-    C -->|Converged| D[End]
+    A[draft: Gemini answers + critiques + proposes queries] --> B[execute_tools: Tavily search]
+    B --> C[revisor: Gemini revises with citations]
+    C --> G[grounding check + score]
+    G -->|score improved and passes left| B
+    G -->|otherwise| D[End]
 ```
 
-1. **Draft** → Generates initial answer & self-reflection
-2. **Execute Tools** → Runs Tavily search for suggested queries
-3. **Revisor** → Refines answer using new evidence and adds citations
-4. **Loop Control** → Stops automatically when reward score stabilizes
+1. **draft** (`chains.py`): Gemini returns an `AnswerQuestion` tool call with an answer, a reflection, and 1-3 search queries.
+2. **execute_tools** (`execute_tools.py`): each query goes to `langchain_tavily.TavilySearch`. Its response (a dict with a `results` list, or an error) is normalized to `[{title, url, content}]` (top 3 per query). Failed queries are recorded as `{"error": ...}` rather than silently dropped.
+3. **revisor** (`chains.py`, `reflexion_agent.py`): Gemini returns a `ReviseAnswer` with inline `[n]` citations and references written as `[n] Title - URL`, and is told to cite only URLs from the search results.
+4. **Grounding check** (`grounding.py`): a deterministic post-check on every revision. A reference is kept only if its URL was returned by Tavily in this run. Other references are dropped, the rest are renumbered, inline `[n]` markers are fixed or removed to match, and raw URLs in the answer that were never retrieved are removed. Everything removed is reported.
+5. **Stop condition** (`scoring.py`): each grounded revision gets a heuristic score (see below). The loop stops when a revision doesn't beat the best score so far, when the model proposes no more queries, or after `--max-iterations` search passes (default 2). The answer returned is the highest-scoring revision.
 
-## 🧮 Reward-Driven Reflexion
+### The score
 
-Each revision is evaluated with a heuristic reward function that scores:
+The score is a fixed checklist, not a learned reward and not reinforcement learning. It is only used to decide when to stop:
 
-- Conciseness (~250 words target)
-- Number of valid references
-- Inline citations ([1], [2])
-- Query coverage
-- Iterative improvement
+| Part | Points |
+|------|--------|
+| Length close to ~250 words | up to 30 |
+| Grounded references (5 each) | up to 20 |
+| Inline `[n]` markers that point at a grounded reference (4 each) | up to 20 |
+| Search queries in the latest pass that returned results (10 each, max 3) | up to 30 |
 
-When the reward stops increasing → the loop ends.
+Failed searches and citations that didn't survive the grounding check earn nothing.
 
-This creates a reinforcement-inspired reasoning process — language-based self-improvement without gradient updates.
-
-## 🔁 Relation to Reinforcement Learning
-
-This project doesn't perform gradient-based RL (no Q-learning or PPO). However, it borrows the conceptual structure of reinforcement learning:
-
-| RL Concept | Reflexion Equivalent |
-|------------|---------------------|
-| Environment | LangGraph + Tavily + LLM |
-| State | Conversation + evidence context |
-| Action | Revised answer |
-| Reward | Heuristic self-evaluation score |
-| Policy Update | Prompt-level behavior change via self-reflection |
-
-This approach, often called **language-based self-reinforcement**, shows how LLMs can simulate RL-like learning through reflection and scoring rather than model fine-tuning.
-
-## 🧰 Project Structure
+## Project structure
 
 ```
-neural-reflexion-agent/
-├── chains.py              # Defines Gemini prompt chains (draft & revisor)
-├── execute_tools.py        # Tavily search tool executor
-├── reflexion_agent.py      # Core LangGraph pipeline + scoring logic
-├── schema.py               # Pydantic tool models
-├── ui_app.py               # Streamlit interface
-├── requirements.txt        # Dependencies
-└── .env                    # API keys (not committed)
+chains.py          Prompts and the draft/revise chains (model passed in, Gemini by default)
+execute_tools.py   Tavily search node and response normalization
+grounding.py       Citation check against retrieved URLs
+scoring.py         Heuristic score used for the stop condition
+reflexion_agent.py Graph construction, final result, CLI
+schema.py          Pydantic tool schemas (AnswerQuestion, ReviseAnswer)
+ui_app.py          Streamlit UI
+tests/             pytest suite with a fake LLM and a fake Tavily client
 ```
 
-## 💻 Streamlit UI
+## Setup
 
-Run:
+Requires Python 3.10+.
 
 ```bash
-streamlit run ui_app.py
-```
-
-### UI Highlights:
-
-- 🧠 Prompt box + "Run Reflexion" button
-- ⚙️ Sidebar controls (max iterations, environment key checks)
-- 🔁 Live run status
-- 📄 Final answer with citations
-- 🌐 Deduplicated sources from Tavily
-- 📊 Run history + side-by-side comparison
-- 💾 Export to Markdown or JSON
-
-## 📦 Installation
-
-### 1️⃣ Install dependencies
-
-```bash
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+cp .env.example .env
 ```
 
-### 2️⃣ Add your API keys in `.env`
+Fill in `.env`:
 
 ```env
-GOOGLE_API_KEY=your_gemini_key_here
-TAVILY_API_KEY=your_tavily_key_here
+GEMINI_API_KEY=your_gemini_key      # GOOGLE_API_KEY also works
+TAVILY_API_KEY=your_tavily_key
+# GEMINI_MODEL=gemini-2.5-flash      # optional, default is gemini-2.5-pro
 ```
 
-### 3️⃣ Run the agent in CLI mode
+Get a Gemini key from Google AI Studio and a Tavily key from tavily.com.
+
+## Usage
+
+Command line:
 
 ```bash
-python reflexion_agent.py
+python reflexion_agent.py "How can small businesses use AI to grow?" --max-iterations 2
 ```
 
-### 4️⃣ Launch the Streamlit UI
+It prints the final answer, its references, the score, how many searches returned results (and the error for any that failed), and any citations that were removed by the grounding check. `--show-graph` prints the graph as Mermaid instead.
+
+Streamlit UI:
 
 ```bash
 streamlit run ui_app.py
 ```
 
-Then open `http://localhost:8501`.
+Then open http://localhost:8501. The UI shows the answer and references, the score, the search queries (with failures marked), the sources Tavily returned, any removed citations, a history of runs with side-by-side comparison, and Markdown/JSON export.
 
-## 📘 Example Output
+## Tests
 
-**Prompt:**
-
-> Write about how small business can leverage AI to grow.
-
-**Final Answer:**
-
-> Small businesses can strategically leverage artificial intelligence (AI) to accelerate growth without significant investment. In marketing, platforms like Mailchimp use AI to optimize email subject lines, improving open rates [1]. Chatbots such as Tidio can automate up to 87% of routine queries, cutting costs [2].
->
-> Operationally, AI tools like QuickBooks automate invoicing and expense tracking, reducing administrative overhead by 29% [3]. Small businesses should start with affordable, scalable tools requiring minimal technical expertise.
->
-> Ethical adoption is crucial: companies must ensure transparency and compliance with GDPR and CCPA [4]. By focusing on specific, measurable areas and responsible practices, small businesses can use AI as a sustainable growth engine.
-
-**References:**
-
-- [1] Mailchimp Subject Line Helper
-- [2] Tidio Chatbot Statistics
-- [3] McKinsey: State of AI 2023
-- [4] Forbes Tech Council: AI & Data Privacy
-
-## ⚙️ Dependencies
-
-```
-langchain>=0.2.16
-langgraph>=0.2.27
-langchain-google-genai>=2.0.4
-langchain-tavily>=0.1.0
-tavily-python>=0.5.0
-pydantic>=2.7.0
-python-dotenv
-google-generativeai
-google-ai-generativelanguage
-streamlit
+```bash
+pip install -r requirements-dev.txt
+pytest
 ```
 
-## 🧩 Future Extensions
+The tests use a fake Tavily client that returns the same dict shape as `TavilySearch` and a scripted fake chat model, so they need no API keys or network. They cover search response normalization, error handling, the grounding check, scoring of failed searches, a full graph run to a final answer, no state leaking between runs, and the Streamlit app. CI runs them on every push and pull request.
 
-| Feature | Description |
-|---------|-------------|
-| 🧠 Persistent Memory | Store learned reflections and source history across sessions |
-| 📊 Reward Visualization | Track reward scores across iterations |
-| 💬 Interactive Chat Mode | Let users refine prompts conversationally |
-| 🧾 Q-Learning Extension | Apply numeric rewards and gradient-free policy updates |
-| 🌐 Multi-Agent Reflexion | Cooperative agents that review each other's work |
+## Limitations
 
-## 🎓 Educational Value
+- The grounding check verifies that a cited URL was retrieved, not that the page supports the sentence citing it. The model can still misread or overstate a source.
+- Tavily snippets are short (truncated to 600 characters here); the model never reads the full pages.
+- The score is a hand-written heuristic. A higher score means more grounded citations and successful searches at roughly the target length, not a more correct answer.
+- Each run makes several Gemini calls; with `gemini-2.5-pro` that can be slow and costs quota. `GEMINI_MODEL=gemini-2.5-flash` is cheaper.
+- Uses LangGraph's `MessageGraph`, which is deprecated in LangGraph 1.0, so dependencies are pinned below 1.0.
+- No memory between runs; every prompt starts fresh.
 
-This project bridges:
+## License
 
-- **Cognitive Science** (self-reflection)
-- **Reinforcement Learning Theory**
-- **Retrieval-Augmented Generation**
-- **LLM-Orchestrated Reasoning Graphs**
-
-It's an ideal foundation for research or a showcase of AI self-improvement mechanisms — combining LangGraph, Google Gemini, and Tavily into a single, interpretable reasoning framework.
-
-## 🧾 License
-
-MIT License © 2025
-
-You are free to modify and distribute this project with attribution.
-
-
+MIT
