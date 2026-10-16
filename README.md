@@ -1,3 +1,5 @@
+> **Moved:** this project now lives in [Agent-Eval-Harness](https://github.com/LasyaRamachandruni/Agent-Eval-Harness). Its grounding check (keep only citations to sources actually retrieved) and its stop-when-the-score-stops-improving loop now run as the `reflexion` strategy of the harness (`agent-eval run --strategy reflexion`), on its own model interface instead of LangChain, with Anthropic, OpenAI and Ollama models, native tool calling, and benchmarks (HotpotQA, HumanEval) to measure it. This repository is kept for reference and is no longer developed.
+
 # Neural Reflexion Agent
 
 [![CI](https://github.com/LasyaRamachandruni/Neural-Reflexion-Agent/actions/workflows/ci.yml/badge.svg)](https://github.com/LasyaRamachandruni/Neural-Reflexion-Agent/actions/workflows/ci.yml)
